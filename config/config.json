@@ -1,0 +1,13 @@
+{
+  "csv_urls": {
+    "kalender": "",
+    "verslagen": "",
+    "leden": "",
+    "leden_config": "",
+    "sponsors": "",
+    "settings": ""
+  },
+  "mailto_contact": "mailto:info@example.com",
+  "home_news_count": 5,
+  "kalender_default_seizoen": "2024–2025"
+}
