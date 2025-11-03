@@ -21,20 +21,8 @@ async function getData(tab){
   else { return await loadCSV(`data/${tab}.csv`); }
 }
 function byId(id){ return document.getElementById(id); }
-function setActiveNav(){
-  const nav = byId('nav'); if(!nav) return;
-  nav.innerHTML = `
-    <a href="index.html">Home</a>
-    <a href="historiek.html">Historiek</a>
-    <a href="kalender.html">Kalender</a>
-    <a href="happening.html">International Football Happening</a>
-    <a href="leden.html">Leden</a>
-    <a href="contact.html">Contact/Info</a>`;
-  const path = location.pathname.split('/').pop() || 'index.html';
-  nav.querySelectorAll('a').forEach(a => { if(a.getAttribute('href')===path) a.classList.add('active'); });
-}
 
-// Sponsors via Google Drive (fallback CSV)
+// Sponsors via Drive (fallback CSV)
 async function renderSponsors(){
   const box = byId('sponsor-track'); if(!box) return;
   const driveImg = id => `https://drive.google.com/uc?export=view&id=${id}`;
@@ -50,8 +38,7 @@ async function renderSponsors(){
       const data = await res.json();
       const files = (data.files||[]).sort((a,b)=> (a.name||'').localeCompare(b.name||''));
       logos = files.map(f => ({ naam: f.name || 'Sponsor', logo_url: driveImg(f.id) }));
-    }catch(e){ console.warn('Drive sponsors fallback to CSV:', e);
-    }
+    }catch(e){ console.warn('Drive sponsors fallback to CSV:', e); }
   }
   if (!logos.length){
     const data = await getData('sponsors');
@@ -61,6 +48,19 @@ async function renderSponsors(){
   box.innerHTML = logos.map(item).join('') + logos.map(item).join('');
 }
 
+function setActiveNav(){
+  const nav = document.getElementById('nav'); if(!nav) return;
+  nav.innerHTML = `
+    <a href="index.html">Home</a>
+    <a href="historiek.html">Historiek</a>
+    <a href="kalender.html">Kalender</a>
+    <a href="happening.html">International Football Happening</a>
+    <a href="leden.html">Leden</a>
+    <a href="contact.html">Contact/Info</a>`;
+  const path = location.pathname.split('/').pop() || 'index.html';
+  nav.querySelectorAll('a').forEach(a => { if(a.getAttribute('href')===path) a.classList.add('active'); });
+}
+
 // Helpers
 function isFutureMatch(m){ return (m.uitslag||'').trim()===''; }
 function formatDate(d){ try{ const a=d.split('-'); return `${a[2]}/${a[1]}/${a[0]}` }catch(e){ return d } }
@@ -68,7 +68,7 @@ function teamCell(name, icon){ return `<span style="display:inline-flex;align-it
 
 // Home
 async function renderHome(){
-  const n = byId('home-next'); const p = byId('home-prev'); const news = byId('home-news');
+  const n = document.getElementById('home-next'); const p = document.getElementById('home-prev'); const news = document.getElementById('home-news');
   if(!(n&&p&&news)) return;
   document.querySelectorAll('.fontBtn').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -183,7 +183,7 @@ async function renderLeden(){
   });
 }
 
-// Contact, Happening contacteer
+// Contact
 function setupContact(){
   const link = document.getElementById('mailtoLink');
   if(link && CFG.mailto_contact) link.href = CFG.mailto_contact;
@@ -191,7 +191,7 @@ function setupContact(){
   if(btn && CFG.mailto_contact){ btn.href = CFG.mailto_contact; }
 }
 
-// Timeline placeholder interaction
+// Timeline
 function setupTimeline(){
   const tl = document.getElementById('timeline'); const out = document.getElementById('timeline-detail');
   if(!(tl&&out)) return;
