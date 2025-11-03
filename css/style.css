@@ -15,10 +15,23 @@ a{color:#bcd7ff;text-decoration:none} a:hover{text-decoration:underline}
 img{max-width:100%;display:block}
 .container{max-width:var(--content-max);margin:0 auto;padding:16px}
 
-/* Left sponsor bar with horizontal R-G-R divider at bottom */
-.pageWithSponsorBar{margin-left:calc(var(--bar-w))}
-.sBar{position:fixed;top:0;left:0;height:100vh;width:var(--bar-w);display:grid;grid-template-rows:1fr 8px;z-index:20;pointer-events:none}
-.sTrack{overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:12px;animation:sroll var(--scroll-duration) linear infinite;background:#0b0f14;border-right:1px solid #1c2530}
+/* Sponsorbalk + verticale R-G-R band tussen bar en content */
+.sBar{
+  position:fixed; top:0; left:0; height:100vh; width:var(--bar-w);
+  display:grid; grid-template-columns:1fr 12px;           /* <— 12px brede band */
+  z-index:20; pointer-events:none;
+}
+.sTrack{
+  overflow:hidden; padding:12px; display:flex; flex-direction:column; gap:12px;
+  animation:sroll var(--scroll-duration) linear infinite;
+  background:#0b0f14; border-right:1px solid #1c2530;
+}
+/* Rood–geel–rood verticale band */
+.sDivider{
+  width:12px; height:100%;
+  background:linear-gradient(90deg, var(--accent-r) 0 33%, var(--accent-y) 33% 66%, var(--accent-r) 66% 100%);
+}
+
 @keyframes sroll{from{transform:translateY(0)}to{transform:translateY(-50%)}}
 .sItem{display:grid;place-items:center;min-height:72px;}
 .sItem img{max-width:90%;max-height:60px;object-fit:contain;filter:saturate(.95) contrast(1.05)}
