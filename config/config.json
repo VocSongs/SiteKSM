@@ -9,5 +9,9 @@
   },
   "mailto_contact": "mailto:info@example.com",
   "home_news_count": 5,
-  "kalender_default_seizoen": "2024–2025"
+  "kalender_default_seizoen": "2024–2025",
+  "google_drive": {
+    "api_key": "",
+    "sponsor_folder_id": ""
+  }
 }
