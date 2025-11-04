@@ -1,245 +1,92 @@
+// SPA-lite patch: vaste top-tegel + fades + doorlopende scroller
 
-// ----------------- CONFIG -----------------
 const CFG = {};
 async function loadConfig(){
-  const res = await fetch('config/config.json'); 
-  if(!res.ok) throw new Error('config.json not found');
-  const json = await res.json();
-  Object.assign(CFG, json);
-  if (CFG.home_news_count == null) CFG.home_news_count = 5;
+  const r = await fetch('config/config.json'); if(!r.ok) throw new Error('missing config');
+  Object.assign(CFG, await r.json());
 }
 
-// ----------------- CSV helpers -----------------
-async function loadCSV(url){
-  const res = await fetch(url);
-  const txt = await res.text();
-  const lines = txt.trim().split(/\r?\n/);
-  const headers = lines.shift().split(',');
-  return lines.filter(Boolean).map(line => {
-    const cols = line.split(',');
-    const obj = {}; headers.forEach((h,i)=> obj[h]=cols[i]??""); return obj;
-  });
-}
-async function getData(tab){
-  const csvUrl = CFG.csv_urls?.[tab];
-  if(csvUrl && csvUrl.length > 4){ return await loadCSV(csvUrl); }
-  else { return await loadCSV(`data/${tab}.csv`); }
-}
-
-// ----------------- NAV -----------------
-const routes = [
-  { key:'home',      label:'Home',      file:'pages/home.html' },
-  { key:'historiek', label:'Historiek', file:'pages/historiek.html' },
-  { key:'kalender',  label:'Kalender',  file:'pages/kalender.html' },
-  { key:'happening', label:'International Football Happening', file:'pages/happening.html' },
-  { key:'leden',     label:'Leden',     file:'pages/leden.html' },
-  { key:'contact',   label:'Contact/Info', file:'pages/contact.html' }
+const routes=[
+  {key:'home',label:'Home',file:'pages/home.html'},
+  {key:'historiek',label:'Historiek',file:'pages/historiek.html'},
+  {key:'kalender',label:'Kalender',file:'pages/kalender.html'},
+  {key:'happening',label:'International Football Happening',file:'pages/happening.html'},
+  {key:'leden',label:'Leden',file:'pages/leden.html'},
+  {key:'contact',label:'Contact/Info',file:'pages/contact.html'}
 ];
-function buildNav(){
-  const nav = document.getElementById('nav'); if(!nav) return;
-  nav.innerHTML = routes.map(r => `<a href="?page=${r.key}" data-route="${r.key}">${r.label}</a>`).join('');
-}
-function setActive(key){
-  const nav = document.getElementById('nav'); if(!nav) return;
-  nav.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.route===key));
+function buildNav(){ const nav=document.getElementById('nav'); if(!nav) return; nav.innerHTML=routes.map(r=>`<a href="?page=${r.key}" data-route="${r.key}">${r.label}</a>`).join(''); }
+function setActive(k){ const nav=document.getElementById('nav'); if(!nav) return; nav.querySelectorAll('a').forEach(a=>a.classList.toggle('active', a.dataset.route===k)); }
+
+const drivePrimary=id=>`https://drive.google.com/uc?export=view&id=${id}`;
+const driveFallback=id=>`https://lh3.googleusercontent.com/d/${id}=w2000`;
+
+function setupSponsorTop(){
+  const img=document.getElementById('sTopImg');
+  const url=CFG.sponsor_bar?.top_fixed_image||"";
+  const h=Number(CFG.sponsor_bar?.top_fixed_height||140);
+  if(url && img){
+    document.documentElement.style.setProperty('--top-h', h+'px');
+    img.src=url;
+  }else{
+    document.documentElement.style.setProperty('--top-h','0px');
+    if(img && img.parentElement) img.parentElement.style.display='none';
+  }
 }
 
-// ----------------- SPONSORS (persistent) -----------------
-const drivePrimary = id => `https://drive.google.com/uc?export=view&id=${id}`;
-const driveFallback = id => `https://lh3.googleusercontent.com/d/${id}=w2000`;
+async function getCSV(tab){
+  const r=await fetch(`data/${tab}.csv`);
+  const t=await r.text();
+  const lines=t.trim().split(/\r?\n/); const head=lines.shift().split(',');
+  return lines.filter(Boolean).map(L=>{const c=L.split(','); const o={}; head.forEach((h,i)=>o[h]=c[i]??""); return o;});
+}
 
 async function renderSponsorsOnce(){
-  const box = document.getElementById('sponsor-track'); if(!box) return;
-  if (box.dataset.ready === '1') return; // already rendered
-  let logos = [];
-  const apiKey   = CFG.google_drive?.api_key?.trim();
-  const folderId = CFG.google_drive?.sponsor_folder_id?.trim();
-  if (apiKey && folderId){
-    try{
-      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType contains 'image/'`);
-      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&key=${apiKey}`;
-      const res = await fetch(url);
-      if(!res.ok) throw new Error(`Drive request failed (${res.status})`);
-      const data = await res.json();
-      const files = (data.files || []).sort((a,b)=> (a.name||'').localeCompare(b.name||''));
-      logos = files.map(f => ({ naam: f.name || 'Sponsor', id: f.id, logo_url: drivePrimary(f.id) }));
-    }catch(e){
-      console.warn('Drive sponsors failed, fallback to CSV:', e);
+  const box=document.getElementById('sponsor-track'); if(!box) return;
+  if(box.dataset.ready==='1') return;
+  let logos=[];
+  try{
+    const api=CFG.google_drive?.api_key?.trim();
+    const fld=CFG.google_drive?.sponsor_folder_id?.trim();
+    if(api && fld){
+      const q=encodeURIComponent(`'${fld}' in parents and trashed=false and mimeType contains 'image/'`);
+      const u=`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&key=${api}`;
+      const r=await fetch(u); if(!r.ok) throw new Error('drive');
+      const data=await r.json();
+      const files=(data.files||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+      logos = files.map(f=>({naam:f.name||'Sponsor', id:f.id, logo_url:drivePrimary(f.id)}));
     }
+  }catch(e){ console.warn('Drive sponsors failed, fallback to CSV', e); }
+  if(!logos.length){
+    const data=await getCSV('sponsors');
+    logos=data.map(x=>{ const m=(x.logo_url||'').match(/id=([\w-]+)/); const id=m?m[1]:null; return {naam:x.naam||'Sponsor', id, logo_url:x.logo_url||''}; });
   }
-  if (!logos.length){
-    const data = await getData('sponsors');
-    logos = data.map(x => {
-      const m = (x.logo_url||'').match(/id=([\w-]+)/);
-      const id = m ? m[1] : null;
-      return { naam: x.naam || 'Sponsor', id, logo_url: x.logo_url || '' };
-    });
-  }
-  const topFixed = CFG.sponsor_bar?.top_fixed_image;
-  if (topFixed){ logos.unshift({ naam:'Top', id:null, logo_url: topFixed, fixed:true }); }
-  const item = l => {
-    const src = l.logo_url || (l.id ? drivePrimary(l.id) : '');
-    const fb  = l.id ? driveFallback(l.id) : (l.logo_url || '');
-    return `<div class="sItem">
-      <img src="${src}" alt="${l.naam||''}" draggable="false"
-           onerror="this.onerror=null; this.src='${fb}'" />
-    </div>`;
-  };
-  box.innerHTML = logos.map(item).join('') + logos.map(item).join('');
-  box.dataset.ready = '1';
+  const item=l=>{ const src=l.logo_url || (l.id?drivePrimary(l.id):''); const fb=l.id?driveFallback(l.id):(l.logo_url||''); return `<div class="sItem"><img src="${src}" alt="${l.naam||''}" draggable="false" onerror="this.onerror=null;this.src='${fb}'"/></div>`; };
+  const html = logos.map(item).join('');
+  box.innerHTML = html + html; // dubbele lijst = naadloos
+  box.dataset.ready='1';
 }
 
-// ----------------- HELPERS -----------------
-function byId(id){ return document.getElementById(id); }
-function isFutureMatch(m){ return (m.uitslag||'').trim()===''; }
-function formatDate(d){ try{ const a=d.split('-'); return `${a[2]}/${a[1]}/${a[0]}` }catch(e){ return d } }
-function teamCell(name, icon){ return `<span style="display:inline-flex;align-items:center;gap:6px;"><img src="icons/${icon}.svg" width="18" height="18" alt=""/> ${name}</span>`; }
-
-// ----------------- PAGE INIT FUNCTIONS -----------------
-async function initHome(){
-  const n = byId('home-next'); const p = byId('home-prev'); const news = byId('home-news');
-  if(!(n&&p&&news)) return;
-  const kal = await getData('kalender');
-  let prev = null, next = null;
-  for(const row of kal){ if(!isFutureMatch(row)) prev=row; else { next=row; break; } }
-  n.innerHTML = next ? (`<div><strong>${formatDate(next.datum)} ${next.uur||''}</strong></div>
-    <div>${teamCell(next.thuis,'home')} vs ${teamCell(next.uit,'bus')}</div>
-    <div class="kicker">${next.locatie||''}</div>`) : '—';
-  p.innerHTML = prev ? (`<div><strong>${formatDate(prev.datum)} ${prev.uur||''}</strong></div>
-    <div>${teamCell(prev.thuis,'home')} vs ${teamCell(prev.uit,'bus')}</div>
-    <div><span class="badge">Uitslag</span> ${prev.uitslag||'-'} ${prev.verslag_id? ` · <a href="?page=kalender" data-route="kalender">📝 ${prev.verslag_titel||'Verslag'}</a>`:''}</div>`) : '—';
-  const V = await getData('verslagen');
-  const N = CFG.home_news_count || 5;
-  const last = V.slice(-N).reverse();
-  news.innerHTML = last.map(v=>`<div style="margin:8px 0;">
-    <div class="kicker">${formatDate(v.datum)} — ${v.tegenstander||''}</div>
-    <div>${v.samenvatting||''}</div>
-  </div>`).join('');
-}
-async function initKalender(){
-  const table = document.querySelector('#kalender-table tbody'); if(!table) return;
-  const sel = document.getElementById('seasonSel');
-  const kal = await getData('kalender');
-  const seasons = [...new Set(kal.map(x=>x.seizoen))].filter(Boolean);
-  sel.innerHTML = seasons.map(s=>`<option value="${s}">${s}</option>`).join('');
-  const defS = CFG.kalender_default_seizoen || seasons[0]; sel.value = defS;
-  function rowHTML(m){
-    const gray = (m.uitslag||'').trim()==='' ? ' style="color:#9aa3ad"' : '';
-    const verslag = m.verslag_id ? `<span title="${m.verslag_titel||'Verslag'}">📝</span>` : '';
-    return `<tr${gray}>
-      <td>${formatDate(m.datum)}</td><td>${m.uur||''}</td>
-      <td>${teamCell(m.thuis,'home')}</td><td>${teamCell(m.uit,'bus')}</td>
-      <td>${m.locatie||''}</td><td>${m.uitslag||''}</td><td>${verslag}</td>
-    </tr>`;
-  }
-  function refresh(){
-    const s = sel.value;
-    const subset = kal.filter(x=>x.seizoen===s);
-    table.innerHTML = subset.map(rowHTML).join('') || '<tr><td colspan="7">Geen wedstrijden</td></tr>';
-  }
-  sel.addEventListener('change', refresh); refresh();
-}
-function initHistoriek(){
-  const tl = document.getElementById('timeline'); const out = document.getElementById('timeline-detail');
-  if(!(tl&&out)) return;
-  tl.querySelectorAll('div').forEach(div=>{
-    div.style.cursor='pointer';
-    div.addEventListener('click', ()=>{
-      out.innerHTML = `<p><strong>${div.textContent}</strong></p><p>Hier komt de bijhorende tekst en foto('s).</p>`;
-    });
-  });
-}
-function initLeden(){
-  const grid = document.getElementById('leden-grid'); if(!grid) return;
-  (async ()=>{
-    const L = (await getData('leden')).sort((a,b)=>(a.naam||'').localeCompare(b.naam||''));
-    const C = await getData('leden_config');
-    const visGrid = C.filter(c=> (c.show_grid||'').toUpperCase()==='TRUE').sort((a,b)=> (parseInt(a.order_grid||'99') - parseInt(b.order_grid||'99')));
-    function cardHTML(p){
-      const img = p.foto_url? `<img src="${p.foto_url}" alt="${p.naam||'Lid'}" style="border-radius:12px;max-height:180px;object-fit:cover;width:100%;">` : '';
-      let lines = visGrid.filter(c=>c.field!=='foto_url').map(c=> `<div><strong>${c.label||''}</strong> ${p[c.field]||''}</div>`).join('');
-      return `<div class="card" data-id="${p.id||''}" style="margin-bottom:12px;cursor:pointer;">
-        ${visGrid.find(c=>c.field==='foto_url')? img : ''}
-        ${lines}
-      </div>`;
-    }
-    grid.innerHTML = L.map(cardHTML).join('');
-    const modal = document.getElementById('leden-modal'); const modalBody = document.getElementById('modal-body'); const modalTitle = document.getElementById('modal-title');
-    const close = document.getElementById('modal-close'); close.addEventListener('click', ()=> modal.classList.remove('open'));
-    grid.querySelectorAll('.card').forEach(card=>{
-      card.addEventListener('click', ()=>{
-        const id = card.getAttribute('data-id');
-        const p = L.find(x=> (x.id||'')===id);
-        const visModal = C.filter(c=> (c.show_modal||'').toUpperCase()==='TRUE').sort((a,b)=> (parseInt(a.order_modal||'99') - parseInt(b.order_modal||'99')));
-        const img = (p?.foto_url)? `<img src="${p.foto_url}" alt="${p.naam||'Lid'}" style="border-radius:12px;max-height:300px;object-fit:cover;width:100%;margin-bottom:10px;">` : '';
-        let rows = visModal.filter(c=>c.field!=='foto_url').map(c=> `<div style="margin:6px 0;"><strong>${c.label||''}</strong> ${p?.[c.field]||''}</div>`).join('');
-        document.getElementById('modal-title').textContent = p?.naam || 'Profiel';
-        document.getElementById('modal-body').innerHTML = img + rows;
-        document.getElementById('leden-modal').classList.add('open');
-      });
-    });
-  })();
-}
-function initContact(){
-  const link = document.getElementById('mailtoLink');
-  if(link && CFG.mailto_contact) link.href = CFG.mailto_contact;
-  const btn = document.getElementById('contacteerBtn');
-  if(btn && CFG.mailto_contact){ btn.href = CFG.mailto_contact; }
-}
-
-// ----------------- ROUTER -----------------
-async function loadPage(key, push=true){
-  const fade = document.getElementById('pageFade');
-  fade.classList.add('show');
-  const r = routes.find(x=>x.key===key) || routes[0];
-  const res = await fetch(r.file); const html = await res.text();
-  const content = document.getElementById('content');
-  content.innerHTML = html;
-  // init per page
-  if (r.key==='home') await initHome();
-  if (r.key==='kalender') await initKalender();
-  if (r.key==='historiek') initHistoriek();
-  if (r.key==='leden') initLeden();
-  if (r.key==='contact') initContact();
-  if (r.key==='happening') initContact(); // voor contacteerBtn mailto
+async function loadPage(key,push=true){
+  const fade=document.getElementById('pageFade'); fade.classList.add('show');
+  const r=routes.find(x=>x.key===key)||routes[0];
+  const html=await (await fetch(r.file)).text();
+  const content=document.getElementById('content'); content.innerHTML=html;
   setActive(r.key);
-  if (push){
-    const url = new URL(location.href);
-    url.searchParams.set('page', r.key);
-    history.pushState({page:r.key}, '', url.toString());
-  }
-  // bind internal route links inside content
-  content.querySelectorAll('a[data-route]').forEach(a=>{
-    a.addEventListener('click', (e)=>{
-      e.preventDefault();
-      loadPage(a.dataset.route);
-    });
-  });
-  setTimeout(()=> fade.classList.remove('show'), 200);
+  if(push){ const u=new URL(location.href); u.searchParams.set('page',r.key); history.pushState({page:r.key},'',u.toString()); }
+  setTimeout(()=>fade.classList.remove('show'),200);
 }
 function bootRouter(){
   buildNav();
-  // capture header nav clicks
-  document.getElementById('nav').querySelectorAll('a').forEach(a=>{
-    a.addEventListener('click', (e)=>{
-      e.preventDefault();
-      const key = a.dataset.route || new URL(a.href).searchParams.get('page');
-      loadPage(key);
-    });
-  });
-  const params = new URLSearchParams(location.search);
-  const key = params.get('page') || 'home';
-  loadPage(key, false);
-  window.onpopstate = (ev)=>{
-    const k = ev.state?.page || new URLSearchParams(location.search).get('page') || 'home';
-    loadPage(k, false);
-  };
+  document.getElementById('nav').querySelectorAll('a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); loadPage(a.dataset.route);}));
+  const k=new URLSearchParams(location.search).get('page')||'home';
+  loadPage(k,false);
+  window.onpopstate=ev=>{ const k2=ev.state?.page||new URLSearchParams(location.search).get('page')||'home'; loadPage(k2,false); };
 }
 
-// ----------------- BOOT -----------------
 document.addEventListener('DOMContentLoaded', async ()=>{
   buildNav();
   await loadConfig();
-  await renderSponsorsOnce(); // render once, stays persistent
-  bootRouter();               // SPA router
+  setupSponsorTop();
+  await renderSponsorsOnce();
+  bootRouter();
 });
