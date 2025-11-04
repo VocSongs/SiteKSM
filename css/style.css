@@ -3,9 +3,9 @@
   --text: #fff;
   --bar-w: 15%;
   --scroll-duration: 60s;
-  --sponsor-img-max: 130px;
-  --sponsor-gap: 18px;
-  --top-h: 140px;
+  --sponsor-img-max: 200px;
+  --sponsor-gap: 10px;
+  --top-h: 160px;
 }
 *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--text);font-family: Inter, Roboto, system-ui,-apple-system,Segoe UI,Helvetica,Arial,sans-serif}
 a{color:#bcd7ff;text-decoration:none} a:hover{text-decoration:underline}
