@@ -1,0 +1,20 @@
+{
+  "csv_urls": {
+    "kalender": "",
+    "verslagen": "",
+    "leden": "",
+    "leden_config": "",
+    "sponsors": "",
+    "settings": ""
+  },
+  "mailto_contact": "mailto:info@example.com",
+  "home_news_count": 5,
+  "kalender_default_seizoen": "2024–2025",
+  "google_drive": {
+    "api_key": "",
+    "sponsor_folder_id": ""
+  },
+  "sponsor_bar": {
+    "top_fixed_image": "img/sponsorTop.png"
+  }
+}
