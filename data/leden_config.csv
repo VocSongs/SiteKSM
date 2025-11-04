@@ -1,9 +1,0 @@
-field,label,show_grid,show_modal,order_grid,order_modal
-foto_url,,TRUE,TRUE,0,0
-naam,Naam,TRUE,TRUE,1,1
-positie,Positie,TRUE,TRUE,2,2
-rugnummer,#,FALSE,TRUE,,3
-rol,Rol,FALSE,TRUE,,4
-bio,Bio,FALSE,TRUE,,5
-socials,Socials,FALSE,TRUE,,6
-email,E-mail,FALSE,FALSE,,
