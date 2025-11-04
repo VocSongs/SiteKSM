@@ -1,10 +1,15 @@
 
+// ---- Config loader ----
 const CFG = {};
 async function loadConfig(){
-  const res = await fetch('config/config.json'); const json = await res.json();
+  const res = await fetch('config/config.json'); 
+  if(!res.ok) throw new Error('config.json not found');
+  const json = await res.json();
   Object.assign(CFG, json);
   if (CFG.home_news_count == null) CFG.home_news_count = 5;
 }
+
+// ---- CSV helpers ----
 async function loadCSV(url){
   const res = await fetch(url);
   const txt = await res.text();
@@ -20,34 +25,8 @@ async function getData(tab){
   if(csvUrl && csvUrl.length > 4){ return await loadCSV(csvUrl); }
   else { return await loadCSV(`data/${tab}.csv`); }
 }
-function byId(id){ return document.getElementById(id); }
 
-// Sponsors via Drive (fallback CSV)
-async function renderSponsors(){
-  const box = byId('sponsor-track'); if(!box) return;
-  const driveImg = id => `https://drive.google.com/uc?export=view&id=${id}`;
-  const apiKey = CFG.google_drive?.api_key;
-  const folderId = CFG.google_drive?.sponsor_folder_id;
-  let logos = [];
-  if (apiKey && folderId){
-    try{
-      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType contains 'image/'`);
-      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=1000&key=${apiKey}`;
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('Drive request failed');
-      const data = await res.json();
-      const files = (data.files||[]).sort((a,b)=> (a.name||'').localeCompare(b.name||''));
-      logos = files.map(f => ({ naam: f.name || 'Sponsor', logo_url: driveImg(f.id) }));
-    }catch(e){ console.warn('Drive sponsors fallback to CSV:', e); }
-  }
-  if (!logos.length){
-    const data = await getData('sponsors');
-    logos = data.map(x => ({ naam: x.naam || 'Sponsor', logo_url: x.logo_url || '' }));
-  }
-  const item = l => `<div class="sItem"><img src="${l.logo_url}" alt="${l.naam}" draggable="false"/></div>`;
-  box.innerHTML = logos.map(item).join('') + logos.map(item).join('');
-}
-
+// ---- Nav ----
 function setActiveNav(){
   const nav = document.getElementById('nav'); if(!nav) return;
   nav.innerHTML = `
@@ -61,15 +40,71 @@ function setActiveNav(){
   nav.querySelectorAll('a').forEach(a => { if(a.getAttribute('href')===path) a.classList.add('active'); });
 }
 
-// Helpers
+// ---- Sponsors via Google Drive (with robust fallback) ----
+const drivePrimary = (id) => `https://drive.google.com/uc?export=view&id=${id}`;
+const driveFallback = (id) => `https://lh3.googleusercontent.com/d/${id}=w2000`;
+
+async function renderSponsors(){
+  const box = document.getElementById('sponsor-track'); if(!box) return;
+  let logos = [];
+
+  const apiKey = CFG.google_drive?.api_key?.trim();
+  const folderId = CFG.google_drive?.sponsor_folder_id?.trim();
+
+  if (apiKey && folderId){
+    try{
+      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType contains 'image/'`);
+      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=1000&key=${apiKey}`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error(`Drive request failed (${res.status})`);
+      const data = await res.json();
+      const files = (data.files||[]).sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+      logos = files.map(f => ({
+        naam: f.name || 'Sponsor',
+        id: f.id,
+        logo_url: drivePrimary(f.id)
+      }));
+    }catch(e){
+      console.warn('Drive sponsors failed, fallback to CSV:', e);
+    }
+  }
+
+  if (!logos.length){
+    const data = await getData('sponsors');
+    logos = data.map(x => {
+      // probeer een ID uit de URL te halen voor fallback
+      let id = null;
+      const m = (x.logo_url||'').match(/id=([\w-]+)/);
+      if(m) id = m[1];
+      return { naam: x.naam || 'Sponsor', id, logo_url: x.logo_url || '' };
+    });
+  }
+
+  // item renderer met <img onerror> fallback naar lh3.googleusercontent.com
+  const item = l => {
+    const src = l.logo_url || (l.id ? drivePrimary(l.id) : '');
+    const fb = l.id ? driveFallback(l.id) : (l.logo_url || '');
+    return `<div class="sItem">
+      <img src="${src}" alt="${l.naam}" draggable="false"
+           onerror="this.onerror=null; this.src='${fb}'" />
+    </div>`;
+  };
+
+  // dubbele lijst voor eindeloze scroll
+  box.innerHTML = logos.map(item).join('') + logos.map(item).join('');
+}
+
+// ---- Helpers ----
+function byId(id){ return document.getElementById(id); }
 function isFutureMatch(m){ return (m.uitslag||'').trim()===''; }
 function formatDate(d){ try{ const a=d.split('-'); return `${a[2]}/${a[1]}/${a[0]}` }catch(e){ return d } }
 function teamCell(name, icon){ return `<span style="display:inline-flex;align-items:center;gap:6px;"><img src="icons/${icon}.svg" width="18" height="18" alt=""/> ${name}</span>`; }
 
-// Home
+// ---- Home ----
 async function renderHome(){
-  const n = document.getElementById('home-next'); const p = document.getElementById('home-prev'); const news = document.getElementById('home-news');
+  const n = byId('home-next'); const p = byId('home-prev'); const news = byId('home-news');
   if(!(n&&p&&news)) return;
+
   document.querySelectorAll('.fontBtn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const dir = btn.dataset.font;
@@ -78,15 +113,19 @@ async function renderHome(){
       html.style.fontSize = (dir==='+'? cur+1 : Math.max(12,cur-1)) + 'px';
     });
   });
+
   const kal = await getData('kalender');
   let prev = null, next = null;
   for(const row of kal){ if(!isFutureMatch(row)) prev=row; else { next=row; break; } }
+
   n.innerHTML = next ? (`<div><strong>${formatDate(next.datum)} ${next.uur||''}</strong></div>
     <div>${teamCell(next.thuis,'home')} vs ${teamCell(next.uit,'bus')}</div>
     <div class="kicker">${next.locatie||''}</div>`) : '—';
+
   p.innerHTML = prev ? (`<div><strong>${formatDate(prev.datum)} ${prev.uur||''}</strong></div>
     <div>${teamCell(prev.thuis,'home')} vs ${teamCell(prev.uit,'bus')}</div>
     <div><span class="badge">Uitslag</span> ${prev.uitslag||'-'} ${prev.verslag_id? ` · <a href="verslag.html?id=${encodeURIComponent(prev.verslag_id)}" target="_blank" rel="noopener">📝 ${prev.verslag_titel||'Verslag'}</a>`:''}</div>`) : '—';
+
   const V = await getData('verslagen');
   const N = CFG.home_news_count || 5;
   const last = V.slice(-N).reverse();
@@ -97,7 +136,7 @@ async function renderHome(){
   </div>`).join('');
 }
 
-// Kalender
+// ---- Kalender ----
 async function renderKalender(){
   const table = document.querySelector('#kalender-table tbody'); if(!table) return;
   const sel = document.getElementById('seasonSel');
@@ -105,6 +144,7 @@ async function renderKalender(){
   const seasons = [...new Set(kal.map(x=>x.seizoen))].filter(Boolean);
   sel.innerHTML = seasons.map(s=>`<option value="${s}">${s}</option>`).join('');
   const defS = CFG.kalender_default_seizoen || seasons[0]; sel.value = defS;
+
   function rowHTML(m){
     const gray = (m.uitslag||'').trim()==='' ? ' style="color:#9aa3ad"' : '';
     const verslag = m.verslag_id ? `<a href="verslag.html?id=${encodeURIComponent(m.verslag_id)}" target="_blank" rel="noopener" title="${m.verslag_titel||'Verslag'}"><img src="icons/note.svg" width="18" height="18" alt="Verslag"/></a>` : '';
@@ -114,15 +154,17 @@ async function renderKalender(){
       <td>${m.locatie||''}</td><td>${m.uitslag||''}</td><td>${verslag}</td>
     </tr>`;
   }
+
   function refresh(){
     const s = sel.value;
     const subset = kal.filter(x=>x.seizoen===s);
     table.innerHTML = subset.map(rowHTML).join('') || '<tr><td colspan="7">Geen wedstrijden</td></tr>';
   }
-  sel.addEventListener('change', refresh); refresh();
+  sel.addEventListener('change', refresh); 
+  refresh();
 }
 
-// Verslagen list
+// ---- Verslagen lijst ----
 async function renderVerslagen(){
   const wrap = document.getElementById('verslag-list'); if(!wrap) return;
   const V = await getData('verslagen');
@@ -136,7 +178,7 @@ async function renderVerslagen(){
   `).join('');
 }
 
-// Verslag detail
+// ---- Verslag detail ----
 async function renderVerslagDetail(){
   const box = document.getElementById('verslag-detail'); if(!box) return;
   const id = new URLSearchParams(location.search).get('id')||'';
@@ -146,18 +188,19 @@ async function renderVerslagDetail(){
   box.innerHTML = `
     <div class="kicker">${formatDate(v.datum)} — ${v.tegenstander||''}</div>
     <h3>${v.titel||'Verslag'}</h3>
-    <p>${(v.inhoud||'').replace(/\\n/g,'<br/>')}</p>
+    <p>${(v.inhoud||'').replace(/\n/g,'<br/>')}</p>
     ${v.fotos_url? `<p><a href="${v.fotos_url}" target="_blank" rel="noopener">Foto's</a></p>`:''}
   `;
 }
 
-// Leden
+// ---- Leden ----
 function sortAZ(a,b){ return (a.naam||'').localeCompare(b.naam||''); }
 async function renderLeden(){
   const grid = document.getElementById('leden-grid'); if(!grid) return;
   const L = (await getData('leden')).sort(sortAZ);
   const C = await getData('leden_config');
-  const visGrid = C.filter(c=> (c.show_grid||'').toUpperCase()==='TRUE').sort((a,b)=> (parseInt(a.order_grid||'99') - parseInt(b.order_grid||'99')));
+  const visGrid = C.filter(c=> (c.show_grid||'').toUpperCase()==='TRUE')
+                   .sort((a,b)=> (parseInt(a.order_grid||'99') - parseInt(b.order_grid||'99')));
   function cardHTML(p){
     const img = p.foto_url? `<img src="${p.foto_url}" alt="${p.naam||'Lid'}" style="border-radius:12px;max-height:180px;object-fit:cover;width:100%;">` : '';
     let lines = visGrid.filter(c=>c.field!=='foto_url').map(c=> `<div><strong>${c.label||''}</strong> ${p[c.field]||''}</div>`).join('');
@@ -173,7 +216,8 @@ async function renderLeden(){
     card.addEventListener('click', ()=>{
       const id = card.getAttribute('data-id');
       const p = L.find(x=> (x.id||'')===id);
-      const visModal = C.filter(c=> (c.show_modal||'').toUpperCase()==='TRUE').sort((a,b)=> (parseInt(a.order_modal||'99') - parseInt(b.order_modal||'99')));
+      const visModal = C.filter(c=> (c.show_modal||'').toUpperCase()==='TRUE')
+                        .sort((a,b)=> (parseInt(a.order_modal||'99') - parseInt(b.order_modal||'99')));
       modalTitle.textContent = p?.naam || 'Profiel';
       const img = (p?.foto_url)? `<img src="${p.foto_url}" alt="${p.naam||'Lid'}" style="border-radius:12px;max-height:300px;object-fit:cover;width:100%;margin-bottom:10px;">` : '';
       let rows = visModal.filter(c=>c.field!=='foto_url').map(c=> `<div style="margin:6px 0;"><strong>${c.label||''}</strong> ${p?.[c.field]||''}</div>`).join('');
@@ -183,15 +227,13 @@ async function renderLeden(){
   });
 }
 
-// Contact
+// ---- Contact + timeline ----
 function setupContact(){
   const link = document.getElementById('mailtoLink');
   if(link && CFG.mailto_contact) link.href = CFG.mailto_contact;
   const btn = document.getElementById('contacteerBtn');
   if(btn && CFG.mailto_contact){ btn.href = CFG.mailto_contact; }
 }
-
-// Timeline
 function setupTimeline(){
   const tl = document.getElementById('timeline'); const out = document.getElementById('timeline-detail');
   if(!(tl&&out)) return;
@@ -203,6 +245,7 @@ function setupTimeline(){
   });
 }
 
+// ---- Boot ----
 document.addEventListener('DOMContentLoaded', async ()=>{
   setActiveNav();
   await loadConfig();
